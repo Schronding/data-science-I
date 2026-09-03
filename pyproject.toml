@@ -1,0 +1,19 @@
+[project]
+name = "data-science-i"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "ipykernel>=7.3.0",
+    "jupyter>=1.1.1",
+    "notebook>=7.6.2",
+    "numpy>=2.5.2",
+]
+
+[tool.uv]
+# NixOS: never build the venv on the Nix-store Python. Its ELF interpreter is the
+# Nix glibc loader, which bypasses nix-ld, so manylinux wheels (pyzmq, numpy) cannot
+# find libstdc++.so.6 at runtime. uv-managed CPython uses /lib64/ld-linux-x86-64.so.2,
+# which nix-ld intercepts and resolves. See NOTES-jupyter-nixos.md.
+python-preference = "only-managed"
