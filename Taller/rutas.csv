@@ -1,0 +1,6 @@
+id_ruta,nombre_ruta,id_zona
+R-01,Ruta Centro-ENES,Z-01
+R-02,Ruta Campus Juriquilla,Z-02
+R-03,Ciclovía Jurica,Z-02
+R-04,Ruta Satélite,Z-03
+R-02,Ruta Campus Juriquilla (Duplicado Error),Z-02
