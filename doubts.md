@@ -449,3 +449,185 @@ Correct - calling `.copy()` creates a completely independent array in memory, se
 ## Not addressed
 
 8 doubts written, 17 comments merged, 4 Correct, 3 Partly correct, 1 Wrong, 0 No prior assumption, ~600 words estimated, 29 last number used.
+
+## taller.ipynb
+
+### 30. Whether a terminal tldr-style tool can explain library functions (taller.ipynb - comment 1) [Lookup]
+#### User's Discovery/Doubt:
+> While VSCode allows me to see the arguments that a specific function of a library expects, to be honest those are practically useless for me that I lack complete understanding on the functions of the library. As now I have `tlrc` in my global `configuration.nix` am I able to have clear explanations of each function in the terminal about a specific library? or are these limited to simply shell commands?
+#### Verdict:
+No prior assumption - tlrc only serves tldr-pages, which document command-line tools, not Python or library APIs.
+
+#### Explanation:
+tlrc is a client for tldr-pages, a community-maintained set of simplified cheat sheets for command-line programs (git, tar, docker, and similar). It has no notion of a Python function or a pandas method, so it cannot explain `read_csv`. For that, use Python's own introspection instead: `help(pd.read_csv)`, or in Jupyter/IPython, `pd.read_csv?` to print the docstring straight into the terminal or a cell.
+
+### 31. Why `print()` on a DataFrame shows a table instead of a memory address (taller.ipynb - comment 2) [Mechanism]
+#### User's Discovery/Doubt:
+> How cool! I thought I was going to get some random memory adress of where the object was located but I actually got a tabular version of the data. As they're short I can completely see them both without problem
+#### Verdict:
+Wrong - printing a Python object does not default to a memory address; that fallback only appears for objects whose class never defines its own text representation, and `DataFrame` does.
+
+#### Explanation:
+Every object converts to text through `__repr__` and `__str__`; `print()` uses `__str__` (falling back to `__repr__` if that's missing). The generic version inherited from `object` itself is what produces the `<Module.Class object at 0x...>` form you expected — it only shows up when a class does nothing to override it. `pandas.DataFrame` overrides both methods explicitly, building the aligned, column-labelled grid you saw instead. This isn't pandas-specific: NumPy arrays, lists, and most objects you'll use define their own readable form, so the raw memory address is the rare case, mostly reserved for bare custom classes.
+
+### 32. Counting NAs per column with `isna().sum()` (taller.ipynb - comment 3) [Correct]
+#### User's Discovery/Doubt:
+> With this I can visually see that the only column in which I have NAs is on `duraction_min`. Is there a function that gives me how many and in which columns? It seems I can combine it with `sum()` to know precisely how many there're
+#### Verdict:
+Correct - chaining `.sum()` onto `.isna()` counts the `True` values in each column, since booleans sum as 0/1.
+
+### 33. What values `parse_dates` accepts, and what `True` actually parses (taller.ipynb - comments 6-first, 5-second, 6-second, 7) [Diagnosis]
+#### User's Discovery/Doubt:
+> Now... about date interpretation... how am I supposed to do that? it seems that it goes directly as an argument when the variables are created.
+
+> As it is telling me that `TypeError: Only booleans and lists are accepted for the 'parse_dates' parameter` I see that I cannot simply provide the name of the column. I will try with a numerical value next.
+
+> It doesn't work either... if I already had it in a variable I would do something like `df['fecha']` as the list returned, but I am just initializing it... how would a boolean work? Would it go row by row creating comparissons to see if anything looks like a date?
+
+> My intuition of passing a list with the literal strings in which the data is passed that it describes as a missing value works... but I still don't know if I managed to parse the dates. When I hover my mouse over `fecha` I just get that it is a string... my problem was that I was not passing a list! I imagine there might be data frames in which there are more than one date (such as an e-commerce with "date purchased" and "date delivered" or something like that). Then what was accomplished with `parsed_dates=True`?
+#### Verdict:
+Wrong - a column name or position can't be handed to `parse_dates` directly because it only accepts a bare `bool` or a `list`; and `parse_dates=True` didn't silently fail, it did something specific and different from parsing `fecha`.
+
+#### Explanation:
+`parse_dates` only accepts two shapes: a `bool`, or a `list` naming columns by position or by name. A single column name (`"fecha"`) or a single integer (`1`) is neither — it's a bare scalar — so both attempts raised the same `TypeError`. The fix was never "try a different scalar," it was "wrap the reference in a list": `parse_dates=["fecha"]` or `parse_dates=[1]`.
+
+The boolean form is where the real misconception was. `parse_dates=True` does not mean "auto-detect and parse any date-looking column." Per pandas' own documentation, `True` means "try parsing the index" — the row labels, not the data columns. None of your calls set an `index_col`, so the DataFrame kept its default `RangeIndex` (0, 1, 2, …), which has no date-like text to parse; `True` had nothing to act on and changed nothing. That's why `fecha` was still a string after that attempt: not a failure, but the wrong tool for the job. `parse_dates=["fecha"]` is the form that targets a named column and actually converts it to `datetime64`.
+
+Your guess about multiple date columns is correct, and it's exactly what the list form is for: `parse_dates=["fecha_compra", "fecha_entrega"]` parses both independently. The idea that a boolean might "go row by row" checking whether values look like dates isn't what happens either — the parameter's type is checked before any row is read; `parse_dates` says which already-identified columns (or the index) to hand to the date parser, it isn't itself a per-cell content sniffer.
+
+### 34. Why a single date value shows `00:00:00` but the printed table doesn't (taller.ipynb - comment 8) [Correct]
+#### User's Discovery/Doubt:
+> Now it indeed looks different as there are now `00:00:00` after each of the dates, which I assume are "hh:mm:ss".
+#### Verdict:
+Correct - that is hours:minutes:seconds; every parsed date carries a time component, and pandas hides it in the whole-table display only when every value in the column is midnight, which is why it reappears once you look at a single value directly (hovering, or indexing one cell).
+
+### 35. `.where()`/`np.where()` don't detect duplicates, and a DataFrame always has an index (taller.ipynb - comments 10, 11) [Mechanism]
+#### User's Discovery/Doubt:
+> I got the error `AttributeError: 'DataFrame' object has no attribute 'dtype'`... and also I don't know how to check if there're duplicates. I might do the latter with `np.where`
+
+> Here the problem seems fairly obvious: I don't have an index nor a concrete way to check each of the indexes and compare to one another... it makes sense, numpy was designed to work with simple functions instead of depending on `for` loops.
+#### Verdict:
+Wrong - a DataFrame always has an index by default (a `RangeIndex`, 0..n-1); the `NameError` came from `index`, `duplicates` and `originals` never being assigned to anything, and neither `.where()` nor `np.where()` detects duplicate values in the first place.
+
+#### Explanation:
+`DataFrame.where(cond, other)` and `np.where(cond, x, y)` are conditional-selection tools: keep, or choose between, values based on a condition you already computed elsewhere. Neither inspects a column and reports which entries repeat — that's a different operation. The bare names `index`, `duplicates` and `originals` in the call were never defined anywhere, which is the literal cause of the `NameError`; even the real `other_week_one.index` wouldn't help, since comparing a position to `position + 1` only ever compares a row to its neighbour, not a value to every other value. The tool for "are there duplicates" is `Series.duplicated()`, which is what you already used correctly a few cells later on `id_ruta` — it flags, per row, whether that row's value has appeared before.
+
+### 36. What merging against a duplicated key actually does (taller.ipynb - comment 15) [Correct]
+#### User's Discovery/Doubt:
+> I didn't expect to have the duplicate ids.
+>
+> ¿Qué anomalía crítica detectaste en el catálogo de rutas (`df_rutas_raw`) al ejecutar la validación de duplicidad? ¿Qué consecuencias graves traería si unimos esta tabla a ciegas con el DataFrame de traslados mediante `pd.merge()`?
+>
+> I believe the biggest problem that it could bring is that `.merge()` probably joins by id, so having a duplicate could duplicate the information of a certain journey or simply throw an error.
+#### Verdict:
+Correct - verified both ways: merging against the undeduplicated route catalog with no `validate` duplicates every matching trip row once per extra route match (10 rows in, 14 out), and adding `validate="many_to_one"`, as you did, turns that same duplication into a `MergeError` instead.
+
+### 37. What `keys=` in `pd.concat` actually attaches to (taller.ipynb - comment 21) [Mechanism]
+#### User's Discovery/Doubt:
+> I don't understand this step about the multiindex... I imagine the purpose is simply to have a single column that is shared by both dataframes
+#### Verdict:
+Partly correct - that single shared column is what you get two cells later, but it's a side effect of flattening the index afterward, not what `keys=` inside `concat` itself produces.
+
+#### Explanation:
+`pd.concat([...], keys=["week_one", "week_two"])` stacks the two frames and prepends a new outer level to the row *index*, not to the columns. The result is a `MultiIndex`: each row is labelled by a pair (which frame it came from, its original position inside that frame), shown as the nested labels on the left of the printout. At that point there is still no "week" column — the label lives in the index, and column-based operations (selecting by name, `.dtypes`, arithmetic) ignore the index entirely. `reset_index(level=0)` is the separate step that lifts that outer level out and turns it into an ordinary column, which is where the "single shared column" actually appears. The purpose of `keys=` by itself is traceability: without it, concatenating two frames that both start at 0 would leave duplicate row labels with no way to tell which source a row came from.
+
+### 38. Net effect of the two `reset_index` calls (taller.ipynb - comment 22) [Correct]
+#### User's Discovery/Doubt:
+> It seems that what I did here was to remove the separation between the weeks and rather added it as crucial information to use.
+#### Verdict:
+Correct - `reset_index(level=0).rename(...)` converts the outer MultiIndex level (the "separation") into a plain `week` column, and the following `reset_index(drop=True)` discards the now-redundant leftover row numbers, leaving that column as ordinary data.
+
+### 39. Why `right_only` never appears after a left merge (taller.ipynb - comments 24-second, 32) [Mechanism]
+#### User's Discovery/Doubt:
+> What does the "_merge" do? I don't see it as a column, and the leading underscore makes me think that it is some kind of reserved syntax... I assume there might be parts of the dataframes in which information was only on one side. That is what `left_only` and `right_only` probably mean.
+
+> It seems that in the `origin_cross_route` column I work with things that overlap, and htat is the reason why I have some values that are present only on the left and some that are present only on the right.
+#### Verdict:
+Wrong - the general definition of the three labels was right, but for this specific merge there are no rows "present only on the right": with `how="left"`, `right_only` is a label that can exist in principle but can never actually be assigned to a row, which your own earlier `value_counts()` output already showed as 0.
+
+#### Explanation:
+Passing `indicator=True` to `pd.merge` adds that categorical `_merge` column (later renamed `origin_cross_route`); its three fixed categories are `both`, `left_only` and `right_only`, marking whether each output row's key was found in both frames, only the left, or only the right. The leading underscore is just pandas' naming convention for a generated column, not special Python syntax. Which of the three labels can actually *appear*, though, depends on the join type: `how="left"` keeps every row of the left frame and attaches matches from the right, so a row ends up either `both` (a match was found) or `left_only` (no match, right-hand columns filled with `NaN`, as happened for `id_ruta="R-99"`). A right-hand row with no match on the left is simply dropped entirely rather than kept and labelled `right_only` — that label only becomes reachable with `how="outer"`.
+
+### 40. Which side of `rename(columns={...})` is old and which is new (taller.ipynb - comment 26) [Correct]
+#### User's Discovery/Doubt:
+> It is a bit strange that `_merge` was a column, as I don't remember defining it anywhere.... How does the `columns` attribute work? For now it seems that the "key" is the name of the column and the "value" (what comes after the `:`) is the thing that it is being renamed into.
+#### Verdict:
+Correct - in `.rename(columns={...})` each entry is `old_name: new_name`, so the dict key is the column as it currently exists and the value is what it becomes.
+
+### 41. The real source of the `KeyError`: wrong dataframe, not a zones duplicate (taller.ipynb - comments 26, 28, 30) [Mechanism]
+#### User's Discovery/Doubt:
+> It is a bit strange that `_merge` was a column, as I don't remember defining it anywhere.... How does the `columns` attribute work? For now it seems that the "key" is the name of the column and the "value" (what comes after the `:`) is the thing that it is being renamed into.
+
+> I got an `KeyError: 'id_zona'` and I think this was caused by the duplicate! I did not provided the clean df for zones.
+
+> In fact, it seems that I have been working with the incorrect dataframe all along. I should probably put a number or something in order to have some notion of temporality.
+#### Verdict:
+Wrong - the `KeyError` had nothing to do with duplicates in `zonas` (`df_zones` has none, verified); comment 30's later diagnosis is the correct one: the wrong dataframe was in use.
+
+#### Explanation:
+`_merge` was created a few lines earlier by `pd.merge(..., indicator=True)`, assigned to `df_joined` — not to `df_all_trips`. The next cell renamed `_merge` on `df_all_trips` instead, a frame that never had that column; verified, `.rename()` silently ignores dict keys that don't match any existing column, so that call ran without error but changed nothing. Merging `df_all_trips` against `df_zones` on `id_zona` then fails with `KeyError` for the same underlying reason: `id_zona` only exists on `df_joined`, since it only arrived there from the routes catalog in the first merge, and was never a column of `df_all_trips`. `zonas.csv` has no duplicate rows at all (verified), so that couldn't have been the cause either. Comment 30's correction is the accurate one: `df_joined`, not `df_all_trips`, is the frame that carries the routes columns from that point on.
+
+### 42. Whether `indicator=True` is required on every merge (taller.ipynb - comment 34) [Lookup]
+#### User's Discovery/Doubt:
+> Why in this one I didn't use the `indicator=True` attribute? What does it do?
+#### Verdict:
+No prior assumption - `indicator=True` is an optional, per-call flag; omitting it on this second merge doesn't break anything, it just means this result has no `_merge`-style column.
+
+#### Explanation:
+`indicator=True` is not a setting that persists across merges or that pandas requires — it's chosen independently on every `pd.merge()` call. When set, it adds a categorical column (named `_merge` by default, or a custom name via `indicator="colname"`) labelling each row `both`, `left_only`, or `right_only`, as already covered for the routes merge. Leaving it off here simply means this merge's output carries no such audit column.
+
+### 43. Identifying the `left_only` record: what's actually missing (taller.ipynb - comment 36) [Mechanism]
+#### User's Discovery/Doubt:
+> 1. ¿Existe algún registro clasificado como `left_only`? Yes, there are some
+> 2. De acuerdo con el diccionario de datos, ¿cuál es el código de ruta de ese registro y qué representa? It seems that in both cases, `left_only` is being used when I have missing values in my other columns, particularly in the ones that describe the code of the route.
+#### Verdict:
+Partly correct - there are indeed two `left_only` rows, but the route code itself (`id_ruta = "R-99"`) is not one of the missing values; what's missing are the columns that come *from* the routes catalog, precisely because no `R-99` exists there.
+
+#### Explanation:
+`left_only` marks a row whose join key had no match on the right side — the key column itself, `id_ruta`, is present and valid on every row, including these two. It's the columns pulled in *from* `df_routes_clean` (`nombre_ruta`, `id_zona`) that come back as `NaN`, because the lookup for `R-99` found nothing. The "code of the route" is not missing at all: it's sitting right there as `R-99`, and it's identifiable precisely because that code doesn't appear anywhere in `rutas.csv`. The distinction matters for the report: describing this as a missing route-code value suggests a gap in the trip records, when the actual finding is a gap in the routes catalog — two trips reference a route the catalog never defines.
+
+### 44. Why deleting or imputing the `left_only` rows would be wrong (taller.ipynb - comment 36) [Mechanism]
+#### User's Discovery/Doubt:
+> 3. ¿Por qué es metodológicamente incorrecto eliminar esa fila del DataFrame o imputarle un valor calculado (como promedios) a sus características de forma automática? Because as it is a categorical column the reality is that there is no numeric way to get is value by doing any type of statistical difference. It wouldn't be correct to use any value unless we have some very clear information about the nature of that tuple (such as redundancy with other column that could guarantee us what value goes in there).
+#### Verdict:
+Partly correct - the reasoning against averaging a categorical column holds, but the question asked about two separate risks and only one is answered; deleting the rows is a different mistake, for a different reason.
+
+#### Explanation:
+Averaging is meaningless for `nombre_ruta` because categories have no arithmetic distance between them — that part is right, and the same argument applies to any label or text column. But the question also asked why *deleting* the row is wrong, which is separate: `duracion_min`, `costo_mxn` and `medio` are all present and valid for these two trips, so deleting the row to avoid two missing route-catalog fields throws away real, complete measurements for a reason unconnected to those measurements. With only 20 trips total, dropping 2 of them over an unrelated missing field also shrinks an already tiny sample and can bias later statistics toward whichever routes happen to be well-catalogued.
+
+### 45. Duplicate primary key vs. repeating foreign key: which "duplicate" is one-to-many (taller.ipynb - comment 37) [Mechanism]
+#### User's Discovery/Doubt:
+> The duplicated data are not an issue in certain scenarios, such as when there is a particular identificator of the routes. Deleating it would be a mistake, as while they might seem redundant those types of ids actually allow us to manipulate data cleanly by several sources. These are known in database theory as "one to many".
+#### Verdict:
+Partly correct - it depends entirely on which "duplicate" is meant, and the two are opposite cases: a repeated foreign key is exactly what "one-to-many" requires and must stay, while a repeated *primary* key (the `R-02` row) is a broken constraint that must be removed, which is what you already did.
+
+#### Explanation:
+"One-to-many" describes a relationship between two tables: one row on the "one" side (a route in `rutas.csv`) can be referenced by many rows on the "many" side (its trips in `traslados`). That relationship depends on `id_ruta` repeating across many trip rows — that repetition is normal and must never be removed, since it's what lets one route join against many trips. That is a different thing from two rows *inside `rutas.csv` itself* both claiming to be `R-02`: a lookup table's key is supposed to be unique, and a second row claiming the same key is a data-entry error (the source file even labels it "Duplicado Error"), not an instance of one-to-many. `drop_duplicates` on `rutas.csv` and the untouched repetition of `id_ruta` inside `traslados` are both correct, for opposite reasons.
+
+### 46. Which columns support which kind of exploration (taller.ipynb - comment 37) [Correct]
+#### User's Discovery/Doubt:
+> It could be argued that this data frame is not suitable for inference in any of its columns, as the tuples are very few (20 tuples), however assuming this is all the data we can have we are able to wokr on several columns: `duracion_min` allows us to explore its mean, average, etc. Its missing values should be ignored, as with the limited amount of data inputing could be wrong. `costo_mxn` allow us the same numeric exploration. `medio`, `nombre_ruta` and `nombre_zona` all allow us to explore these in order of presence. We can very easily create histograms to see which one are the most and least common, etc.
+#### Verdict:
+Correct - descriptive exploration (central tendency for the numeric columns, frequency counts and histograms for the categorical ones) is exactly what a 20-row sample can support, and being cautious about imputing on so little data is a reasonable call.
+
+## Unprompted correction
+
+- none
+
+## Noted
+- taller.ipynb comment 0 - reflection on the exercise's design, nothing about pandas asserted
+- taller.ipynb comment 4 - reaction to output already visible
+- taller.ipynb comment 5 (first) - restatement of output already visible
+- taller.ipynb comment 9 - plan for the following cell, nothing asserted
+- taller.ipynb comment 12 - narration of the next step
+- taller.ipynb comment 13 - narration of the next step
+- taller.ipynb comment 14 - narration of the next step
+- taller.ipynb comment 16 - narration of the next step
+- taller.ipynb comment 17 - narration of the next step
+- taller.ipynb comment 18 - narration of the next step
+- taller.ipynb comment 19 - reaction plus plan, nothing asserted about a mechanism
+- taller.ipynb comment 20 - narration of the next step
+- taller.ipynb comment 24 (first) - narration of the next step
+
+## Not addressed
+- none
